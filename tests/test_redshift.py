@@ -140,6 +140,14 @@ def test_password_is_left_to_libpq():
     assert credentials(RedshiftConfig(host=HOST, database="a", user="ro")) == ("ro", None)
 
 
+def test_password_from_a_named_env_var(monkeypatch):
+    rs = RedshiftConfig(host=HOST, database="a", user="ro", password_env="RS_PASSWORD")
+    with pytest.raises(WarehouseError, match="RS_PASSWORD"):
+        credentials(rs)
+    monkeypatch.setenv("RS_PASSWORD", "s3cret")
+    assert credentials(rs) == ("ro", "s3cret")
+
+
 class FakeRedshift(Engine):
     remote = True
 
@@ -296,3 +304,15 @@ def test_pg_cli(pg_cfg):
     assert out.exit_code == 0 and "| val |" in out.output
     out = CliRunner().invoke(main, ["-c", config, "query", f"select nope from {s}_a.t"])
     assert out.exit_code == 1 and "nope" in out.output
+
+
+@pytest.mark.postgres
+def test_pg_doctor(pg_cfg):
+    from lazarillo.doctor import doctor
+
+    cfg, s = pg_cfg
+    report = doctor(cfg.root / "lazarillo.yml")
+    text = report.to_markdown()
+    assert report.ok, text
+    assert f"as `{cfg.redshift.user}`" in text and f"`{s}_a` (1)" in text
+    assert {c.title: c.status for c in report.checks}["Read-only"] == "ok"

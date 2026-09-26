@@ -8,6 +8,7 @@ by Redshift itself.
 
 from __future__ import annotations
 
+import os
 import re
 
 from .config import RedshiftConfig
@@ -37,6 +38,11 @@ def credentials(rs: RedshiftConfig) -> tuple[str | None, str | None]:
     chain (environment variables, ~/.aws, SSO, instance or task role).
     """
     if not rs.iam:
+        if rs.password_env and not rs.password:
+            if (password := os.environ.get(rs.password_env)) is None:
+                raise WarehouseError(f"Set the {rs.password_env} environment variable to the Redshift password "
+                                     "(warehouse.password_env in lazarillo.yml)")
+            return rs.user, password
         # A missing password is fine: libpq then reads PGPASSWORD or ~/.pgpass.
         return rs.user, rs.password
     try:

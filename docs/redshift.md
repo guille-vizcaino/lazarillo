@@ -11,6 +11,15 @@ pip install dbt-redshift              # only if you use verify
 
 ## Configuration
 
+`lazarillo init` writes this for you: it reads the production target of your dbt-redshift
+profile, or asks for the host, database and how you sign in. Without a terminal, pass flags:
+
+```bash
+lazarillo init --no-input -w redshift --host my-cluster.abc123.eu-west-1.redshift.amazonaws.com \
+  --database analytics --iam --cluster my-cluster --aws-profile warehouse-readonly
+lazarillo doctor
+```
+
 ```yaml
 warehouse:
   type: redshift
@@ -29,8 +38,14 @@ dbt:
   dev_schema: dbt_dev
 ```
 
-Leave the password out of the file. libpq reads it from `PGPASSWORD` or `~/.pgpass`,
-or use IAM and skip passwords altogether:
+Leave the password out of the file. libpq reads it from `PGPASSWORD` or `~/.pgpass`, or
+name the variable that holds it, as dbt profiles do with `env_var()`:
+
+```yaml
+  password_env: REDSHIFT_PASSWORD
+```
+
+Or use IAM and skip passwords altogether:
 
 ```yaml
 warehouse:

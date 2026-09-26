@@ -30,12 +30,16 @@ the agent's word**. Every claim comes with a diff.
 ```bash
 pip install "lazarillo[all]"
 cd your-project
-lazarillo init                # writes lazarillo.yml and finds your dbt project, if any
-lazarillo query "select 42"
+lazarillo init                # finds your dbt project and reads the warehouse from its profile
+lazarillo doctor              # checks the connection, the read-only guard and the manifest
 ```
 
-`lazarillo init` prints the `.mcp.json` block that hands the harness to your agent. The core
-only needs DuckDB; pick extras for the rest of your stack: `delta`, `iceberg`, `s3`, `glue`,
+`lazarillo init` takes the warehouse from the production target in dbt's `profiles.yml` and
+asks only for what is missing (with dbt Cloud, that is the host, database and how you sign in).
+Passwords never go in `lazarillo.yml`: it names the env var, `~/.pgpass` or IAM instead.
+`lazarillo doctor` then connects with the guardrails on, confirms the warehouse refuses
+writes, and lists the tables the agent can see. `init` also prints the `.mcp.json` block that
+hands the harness to your agent. The core only needs DuckDB; pick extras for the rest of your stack: `delta`, `iceberg`, `s3`, `glue`,
 `redshift`, `dbt`, `mcp`, or `all`. Without dbt you still get `query` and `diff`; add a dbt project to unlock `map`,
 `describe`, `impact` and `verify`. If production runs in dbt Cloud, the map can come from
 your production job instead ([docs/dbt-cloud.md](https://github.com/guille-vizcaino/lazarillo/blob/main/docs/dbt-cloud.md)).
@@ -105,7 +109,7 @@ lazarillo -c examples/tarima-tickets/lazarillo.yml mcp     # MCP over stdio
 ```
 
 This repo ships a `.mcp.json` wired to the demo, so opening it in Claude Code gives the agent these tools:
-`data_map`, `describe_model`, `impact`, `query`, `diff` and `verify`. The server also sends
+`data_map`, `describe_model`, `impact`, `query`, `diff`, `verify` and `doctor`. The server also sends
 instructions that tell the agent to verify before it claims success.
 
 Try: *"Finance says the payout for Los Tejados in Barcelona looks too high. Find out why and propose a fix."*
@@ -114,7 +118,8 @@ Try: *"Finance says the payout for Los Tejados in Barcelona looks too high. Find
 
 | command | what it does |
 |---|---|
-| `lazarillo init [DIR]` | Write a starter `lazarillo.yml` and print the MCP config |
+| `lazarillo init [DIR]` | Write `lazarillo.yml` from your dbt profile (or a few questions) and print the MCP config |
+| `lazarillo doctor` | Check the connection, the read-only guard, visible tables and the manifest |
 | `lazarillo map` | Sources, models, materializations, exposures |
 | `lazarillo describe MODEL` | Columns, tests, SQL, upstream and downstream |
 | `lazarillo impact MODEL` | Downstream models and dashboards |

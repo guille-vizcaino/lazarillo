@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.1.1
+
+- `lazarillo init` reads the warehouse from the production target in dbt's `profiles.yml`
+  (DuckDB, or Redshift with password or IAM) and asks only for what is missing. Flags such as
+  `--warehouse redshift --host … --iam` cover scripts and agents; `--no-input` never asks.
+- Redshift passwords can come from a named env var (`password_env`), as dbt profiles do.
+  Passwords are never written to `lazarillo.yml`.
+- `lazarillo doctor` (and the `doctor` MCP tool): config, connection, a write the warehouse
+  must refuse, visible tables, dbt manifest and production schema, as a Markdown checklist.
+- The README quickstart no longer ends in "No warehouse at …".
+
 ## 0.1.0
 
 First public release.
