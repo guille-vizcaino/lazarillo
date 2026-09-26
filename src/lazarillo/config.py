@@ -80,7 +80,8 @@ class RedshiftConfig:
     """How to reach a Redshift warehouse (provisioned or Serverless).
 
     With `iam: true` a short-lived password comes from the Redshift API, using the same
-    AWS chain as the lake. Otherwise the password falls back to PGPASSWORD or ~/.pgpass.
+    AWS chain as the lake. Otherwise it comes from the `password_env` variable, or libpq
+    falls back to PGPASSWORD or ~/.pgpass.
     """
 
     host: str
@@ -89,6 +90,8 @@ class RedshiftConfig:
     user: str | None = None
     # Prefer PGPASSWORD, ~/.pgpass or IAM so secrets stay out of the repository.
     password: str | None = None
+    # Name of an environment variable holding the password, e.g. the one dbt's profile uses.
+    password_env: str | None = None
     iam: bool = False
     cluster_identifier: str | None = None  # provisioned cluster, for IAM
     workgroup: str | None = None           # Serverless workgroup, for IAM
