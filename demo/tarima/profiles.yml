@@ -1,0 +1,14 @@
+# Local stand-in for Redshift. Both targets share one database, like prod and dev schemas would.
+tarima:
+  target: prod
+  outputs:
+    prod:
+      type: duckdb
+      path: ../data/warehouse.duckdb
+      schema: analytics
+      threads: 1
+    dev:
+      type: duckdb
+      path: ../data/warehouse.duckdb
+      schema: dev
+      threads: 1

@@ -1,0 +1,23 @@
+# Tarima Tickets demo (fictional concert ticketing). Paths are relative to this file.
+warehouse:
+  path: data/warehouse.duckdb        # stands in for Redshift
+
+attach:
+  src: data/source.duckdb             # the ticketing system landing is extracted from
+
+landing:
+  iceberg_catalog:                    # stands in for the Glue catalog
+    name: tarima
+    uri: sqlite:///data/landing/iceberg/catalog.db
+    warehouse: file://data/landing/iceberg
+
+dbt:
+  project_dir: tarima
+  prod_target: prod
+  dev_target: dev
+  prod_schema: analytics
+  dev_schema: dev
+
+guardrails:
+  max_rows: 50
+  pii_columns: [email, name, phone]

@@ -1,0 +1,9 @@
+version: 2
+
+sources:
+  - name: landing
+    description: Raw extracts from the ticketing system, landed as-is.
+    schema: landing
+    tables:
+      - name: orders
+      - name: events

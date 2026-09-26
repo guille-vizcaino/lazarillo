@@ -1,0 +1,37 @@
+version: 2
+
+models:
+  - name: fct_orders
+    description: One row per ticket order with its event and current status.
+    columns:
+      - name: order_id
+        description: Order identifier from the ticketing system.
+        data_tests: [unique, not_null]
+      - name: event_name
+        description: Artist @ venue.
+      - name: total_eur
+        description: Ticket price plus service fees, in euros.
+      - name: status
+        description: paid | refunded
+        data_tests:
+          - accepted_values:
+              arguments:
+                values: [paid, refunded]
+  - name: fct_event_revenue
+    description: Tickets sold and revenue per event, excluding refunds.
+    columns:
+      - name: revenue_eur
+        description: Revenue from paid orders (price + fees).
+
+exposures:
+  - name: revenue_by_event
+    label: Revenue by event
+    type: dashboard
+    maturity: high
+    url: https://app.powerbi.com/groups/tarima/reports/revenue-by-event
+    description: Tickets and revenue per event. Promoters are paid out from these numbers.
+    depends_on:
+      - ref('fct_event_revenue')
+    owner:
+      name: Finance
+      email: finance@example.com
