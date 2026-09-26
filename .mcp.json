@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "lazarillo": {
+      "command": ".venv/bin/lazarillo",
+      "args": ["-c", "demo/lazarillo.yml", "mcp"]
+    }
+  }
+}
