@@ -9,6 +9,7 @@ from .config import Config
 from .context import DataMap
 from .diff import diff as run_diff
 from .guardrails import GuardrailViolation
+from .engine import WarehouseError
 from .lake import LakeError
 from .verify import verify as run_verify
 from .warehouse import open_warehouse
@@ -50,32 +51,35 @@ def build_server(cfg: Config) -> MCPServer:
     @server.tool()
     def query(sql: str) -> str:
         """Run ONE read-only SELECT. Results are row-capped and PII columns are masked."""
-        with open_warehouse(cfg) as wh:
-            try:
+        try:
+            with open_warehouse(cfg) as wh:
                 return wh.query(sql).to_markdown()
-            except GuardrailViolation as e:
-                return f"Refused by guardrail: {e}"
-            except duckdb.Error as e:
-                return f"SQL error: {e}"
+        except GuardrailViolation as e:
+            return f"Refused by guardrail: {e}"
+        except (duckdb.Error, WarehouseError) as e:
+            return f"SQL error: {e}"
 
     @server.tool()
     def diff(left: str, right: str, key: list[str], where: str | None = None) -> str:
         """Compare two relations row by row. Refs: `schema.table`, `src.table`,
         `delta:<path or s3://...>`, `iceberg:<namespace.table>`, `parquet:<glob or s3://...>`."""
-        with open_warehouse(cfg) as wh:
-            try:
+        try:
+            with open_warehouse(cfg) as wh:
                 return run_diff(wh, left, right, key, where).to_markdown()
-            except GuardrailViolation as e:
-                return f"Refused by guardrail: {e}"
-            except LakeError as e:
-                return f"Lake error: {e}"
-            except duckdb.Error as e:
-                return f"SQL error: {e}"
+        except GuardrailViolation as e:
+            return f"Refused by guardrail: {e}"
+        except LakeError as e:
+            return f"Lake error: {e}"
+        except (duckdb.Error, WarehouseError) as e:
+            return f"SQL error: {e}"
 
     @server.tool()
     def verify(model: str, where: str | None = None) -> str:
         """Build `model` (and its parents) in the dev schema, diff it against prod and
         list the exposures that would see the difference."""
-        return run_verify(cfg, model, where=where).to_markdown()
+        try:
+            return run_verify(cfg, model, where=where).to_markdown()
+        except WarehouseError as e:
+            return f"SQL error: {e}"
 
     return server

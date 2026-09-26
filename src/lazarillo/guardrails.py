@@ -31,6 +31,8 @@ def check_read_only(sql: str) -> str:
 
 
 def with_row_limit(sql: str, max_rows: int) -> str:
+    if duckdb.extract_statements(sql)[0].type == duckdb.StatementType.EXPLAIN:
+        return sql  # a plan cannot sit in a subquery, and it is short anyway
     return f"SELECT * FROM ({sql}) AS _lazarillo LIMIT {int(max_rows)}"
 
 

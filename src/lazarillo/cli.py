@@ -15,6 +15,7 @@ from .context import DataMap
 from .dbt_cloud import DbtCloudError
 from .diff import diff as run_diff
 from .guardrails import GuardrailViolation
+from .engine import WarehouseError
 from .lake import LakeError
 from .warehouse import open_warehouse
 
@@ -28,7 +29,7 @@ def _warehouse(ctx: click.Context):
     try:
         with open_warehouse(_cfg(ctx)) as wh:
             yield wh
-    except (FileNotFoundError, LakeError) as e:
+    except (FileNotFoundError, LakeError, WarehouseError) as e:
         raise click.ClickException(str(e))
 
 
@@ -106,7 +107,7 @@ def query(ctx, sql, max_rows):
             click.echo(wh.query(sql, max_rows).to_markdown())
         except GuardrailViolation as e:
             raise click.ClickException(f"Guardrail: {e}")
-        except duckdb.Error as e:
+        except (duckdb.Error, WarehouseError) as e:
             raise click.ClickException(str(e))
 
 
@@ -130,7 +131,7 @@ def diff(ctx, left, right, key, where, as_json):
             report = run_diff(wh, left, right, list(key), where)
         except GuardrailViolation as e:
             raise click.ClickException(f"Guardrail: {e}")
-        except (LakeError, duckdb.Error) as e:
+        except (LakeError, duckdb.Error, WarehouseError) as e:
             raise click.ClickException(str(e))
     click.echo(json.dumps(report.to_dict(), default=str, indent=2) if as_json else report.to_markdown())
 
@@ -144,7 +145,10 @@ def verify(ctx, model, key, where):
     """Build MODEL in the dev schema and diff it against production."""
     from .verify import verify as run_verify
 
-    report = run_verify(_cfg(ctx), model, list(key) or None, where)
+    try:
+        report = run_verify(_cfg(ctx), model, list(key) or None, where)
+    except WarehouseError as e:
+        raise click.ClickException(str(e))
     click.echo(report.to_markdown())
     if not report.dbt_ok:
         ctx.exit(1)

@@ -126,7 +126,8 @@ Try: *"Finance says the payout for Los Tejados in Barcelona looks too high. Find
 Relations can be `schema.table`, `attached_db.table`, `delta:<path>`,
 `iceberg:<namespace.table>` or `parquet:<glob>`. Paths can be local or `s3://`, Iceberg
 catalogs can be SQL, AWS Glue or REST, and DuckLakes can be attached next to the
-warehouse. See [docs/aws.md](docs/aws.md).
+warehouse. See [docs/aws.md](docs/aws.md). The warehouse itself can be a DuckDB file or
+Redshift, with IAM auth; see [docs/redshift.md](docs/redshift.md).
 
 ## Scope
 
@@ -144,7 +145,7 @@ Lazarillo doesn't run your pipelines. It checks what they produce.
 - [x] `verify`: dev build, diff and blast radius
 - [x] MCP server
 - [x] Lake in S3 (Delta, Parquet, Iceberg), AWS Glue catalog and DuckLake
-- [ ] Redshift adapter
+- [x] Redshift as the warehouse, with IAM auth ([docs/redshift.md](docs/redshift.md))
 - [x] dbt Cloud: read the manifest of the production job
 - [ ] `--defer` builds so `verify` doesn't rebuild parents
 - [ ] Cost guardrails (`EXPLAIN`-based scan budget)

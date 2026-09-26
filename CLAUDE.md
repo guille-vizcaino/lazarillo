@@ -9,4 +9,6 @@
   Any new tool that touches data must go through `Warehouse` so the read-only, row-cap
   and PII rules apply. Lake files are opened by `lake.Lake`, only inside `landing.locations`.
 - S3 and Glue tests run on moto with no account; `pytest -m minio` adds a real MinIO (docs/aws.md).
+- Redshift tests stub AWS; `pytest -m postgres` runs the SQL against Postgres (docs/redshift.md).
+  Warehouse SQL must work on DuckDB and Redshift alike.
 - The demo company (Tarima Tickets) is fictional. Never add real company names, schemas or data.

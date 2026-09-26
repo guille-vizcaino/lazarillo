@@ -21,6 +21,9 @@ def is_uri(value: str) -> bool:
 @dataclass
 class Guardrails:
     max_rows: int = 200
+    # Diffs between the remote warehouse and a local table copy the warehouse side
+    # locally; refuse above this many rows and ask for a narrower --where.
+    max_transfer_rows: int = 1_000_000
     pii_columns: list[str] = field(default_factory=lambda: ["email", "name", "phone"])
 
 
@@ -73,6 +76,30 @@ class S3Config:
 
 
 @dataclass
+class RedshiftConfig:
+    """How to reach a Redshift warehouse (provisioned or Serverless).
+
+    With `iam: true` a short-lived password comes from the Redshift API, using the same
+    AWS chain as the lake. Otherwise the password falls back to PGPASSWORD or ~/.pgpass.
+    """
+
+    host: str
+    database: str
+    port: int = 5439
+    user: str | None = None
+    # Prefer PGPASSWORD, ~/.pgpass or IAM so secrets stay out of the repository.
+    password: str | None = None
+    iam: bool = False
+    cluster_identifier: str | None = None  # provisioned cluster, for IAM
+    workgroup: str | None = None           # Serverless workgroup, for IAM
+    region: str | None = None
+    profile: str | None = None
+    sslmode: str = "require"
+    # Every statement is cancelled after this long, so one query cannot hog the cluster.
+    timeout_seconds: int = 300
+
+
+@dataclass
 class Attachment:
     """A database attached next to the warehouse: another DuckDB file or a DuckLake."""
 
@@ -85,7 +112,8 @@ class Attachment:
 @dataclass
 class Config:
     root: Path
-    warehouse: Path
+    # The DuckDB file, or None when the warehouse is Redshift.
+    warehouse: Path | None
     attach: dict[str, Attachment] = field(default_factory=dict)
     dbt: DbtConfig | None = None
     iceberg_catalog: dict[str, str] | None = None
@@ -94,6 +122,7 @@ class Config:
     # lazarillo.yml, so a stray ref cannot wander around the disk or other buckets.
     locations: list[str] = field(default_factory=list)
     guardrails: Guardrails = field(default_factory=Guardrails)
+    redshift: RedshiftConfig | None = None
 
     def path(self, value: str) -> Path:
         p = Path(value)
@@ -138,7 +167,16 @@ def load_config(path: Path | None = None) -> Config:
         p = Path(v)
         return p if p.is_absolute() else (root / p).resolve()
 
-    cfg = Config(root=root, warehouse=resolve(raw["warehouse"]["path"]))
+    wh = dict(raw["warehouse"])
+    kind = wh.pop("type", "duckdb")
+    if kind == "duckdb":
+        cfg = Config(root=root, warehouse=resolve(wh["path"]))
+    elif kind == "redshift":
+        cfg = Config(root=root, warehouse=None, redshift=RedshiftConfig(**wh))
+        if cfg.redshift.iam and not (cfg.redshift.cluster_identifier or cfg.redshift.workgroup):
+            raise ValueError("Redshift IAM auth needs `cluster_identifier` or `workgroup` in lazarillo.yml")
+    else:
+        raise ValueError(f"Unknown warehouse type {kind!r}; use duckdb or redshift")
     cfg.attach = {name: _attachment(cfg, v) for name, v in (raw.get("attach") or {}).items()}
 
     if dbt := raw.get("dbt"):

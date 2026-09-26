@@ -38,6 +38,11 @@ TEMPLATE = """\
 # Lazarillo config. Relative paths are resolved against this file.
 warehouse:                            # DuckDB database the agent reads (read-only)
   path: {warehouse}
+# warehouse:                          # or Redshift, see docs/redshift.md
+#   type: redshift
+#   host: my-cluster.abc123.eu-west-1.redshift.amazonaws.com
+#   database: analytics
+#   user: lazarillo_ro                # password from PGPASSWORD or ~/.pgpass, or iam: true
 
 # attach:                             # extra DuckDB files, queried as <name>.<table>
 #   src: data/source.duckdb

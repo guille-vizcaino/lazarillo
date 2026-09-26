@@ -11,6 +11,9 @@ Relations are addressed with short references:
     lake.orders                      a table in an attached DuckLake
 
 Paths must sit inside `landing.locations`; Iceberg tables are reached through the catalog.
+
+The warehouse is a DuckDB file or Redshift. With Redshift, plain `schema.table` refs and
+agent SQL run there, while lake tables and attachments stay in a local DuckDB.
 """
 
 from __future__ import annotations
@@ -24,6 +27,7 @@ from typing import Iterator
 import duckdb
 
 from .config import Attachment, Config, is_uri
+from .engine import DuckDBEngine, Engine
 from .guardrails import GuardrailViolation, check_identifier, check_read_only, mask_rows, with_row_limit
 from .lake import Lake, LakeError
 
@@ -47,10 +51,14 @@ class QueryResult:
 
 
 class Warehouse:
-    def __init__(self, cfg: Config, con: duckdb.DuckDBPyConnection, lake: Lake | None = None):
+    def __init__(self, cfg: Config, con: duckdb.DuckDBPyConnection, lake: Lake | None = None,
+                 engine: Engine | None = None):
         self.cfg = cfg
-        self.con = con
+        self.con = con  # the local DuckDB: lake tables and attachments
         self.lake = lake or Lake(cfg)
+        self.local = DuckDBEngine(con)
+        # Where warehouse tables live and agent SQL runs: the same DuckDB, or Redshift.
+        self.engine = engine or self.local
 
     def relation(self, ref: str) -> str:
         """Turn a reference into something that can follow FROM."""
@@ -70,6 +78,25 @@ class Warehouse:
         except Exception as e:
             raise LakeError(f"Could not read {ref!r}: {type(e).__name__}: {e}") from e
 
+    def resolve(self, ref: str) -> tuple[str, Engine]:
+        """Like `relation`, plus the engine that can read it."""
+        kind, _, target = ref.partition(":")
+        local = bool(target) or ref.split(".")[0] in self.cfg.attach
+        return self.relation(ref), (self.local if local else self.engine)
+
+    def localize(self, relation: str, engine: Engine) -> str:
+        """Copy a warehouse relation into the local DuckDB, so it can meet a lake table."""
+        if engine is self.local:
+            return relation
+        cap = self.cfg.guardrails.max_transfer_rows
+        rows = engine.scalar(f"SELECT count(*) FROM {relation} AS _lz")
+        if rows > cap:
+            raise GuardrailViolation(
+                f"{rows:,} warehouse rows would be copied locally to compare with a lake table; "
+                f"the limit is {cap:,} (guardrails.max_transfer_rows). Narrow it with a `where`."
+            )
+        return self._register(engine.fetch_arrow(f"SELECT * FROM {relation} AS _lz"))
+
     def _register(self, arrow_obj) -> str:
         name = f"_lz_{next(_counter)}"
         self.con.register(name, arrow_obj)
@@ -79,11 +106,9 @@ class Warehouse:
         """Run agent-supplied SQL: one read-only statement, row-capped, PII masked."""
         limit = max_rows or self.cfg.guardrails.max_rows
         try:
-            cur = self.con.execute(with_row_limit(check_read_only(sql), limit + 1))
+            columns, rows = self.engine.run(with_row_limit(check_read_only(sql), limit + 1))
         except duckdb.PermissionException as e:
             raise GuardrailViolation("SQL cannot touch the filesystem; use a relation ref instead.") from e
-        columns = [d[0] for d in cur.description]
-        rows = cur.fetchall()
         return QueryResult(
             columns=columns,
             rows=mask_rows(columns, rows[:limit], self.cfg.guardrails.pii_columns),
@@ -91,18 +116,23 @@ class Warehouse:
         )
 
     def columns(self, relation: str) -> list[tuple[str, str]]:
-        return [(r[0], r[1]) for r in self.con.execute(f"DESCRIBE SELECT * FROM {relation}").fetchall()]
+        return self.local.columns(relation)
 
 
 @contextmanager
 def open_warehouse(cfg: Config) -> Iterator[Warehouse]:
     """Open the warehouse read-only. The connection is short-lived so dbt can take the lock."""
-    if not cfg.warehouse.exists():
+    if cfg.redshift:
+        # Lake tables and attachments still need a DuckDB; an empty one in memory will do.
+        con = duckdb.connect(":memory:")
+    elif not cfg.warehouse.exists():
         raise FileNotFoundError(
             f"No warehouse at {cfg.warehouse}. Point `warehouse.path` in lazarillo.yml at a DuckDB file."
         )
-    con = duckdb.connect(str(cfg.warehouse), read_only=True)
+    else:
+        con = duckdb.connect(str(cfg.warehouse), read_only=True)
     lake = Lake(cfg)
+    remote = None
     try:
         attached = [_attach(con, lake, check_identifier(name), att) for name, att in cfg.attach.items()]
         if lake_dirs := [d for d in attached if d]:
@@ -115,8 +145,14 @@ def open_warehouse(cfg: Config) -> Iterator[Warehouse]:
         # Other lake tables are read by Python and handed to DuckDB as Arrow instead.
         con.execute("SET enable_external_access = false")
         con.execute("SET lock_configuration = true")
-        yield Warehouse(cfg, con, lake)
+        if cfg.redshift:
+            from .redshift import connect
+
+            remote = connect(cfg.redshift)
+        yield Warehouse(cfg, con, lake, remote)
     finally:
+        if remote:
+            remote.close()
         con.close()
 
 

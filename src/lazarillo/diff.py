@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-from .guardrails import MASK, check_identifier, is_pii
+from .guardrails import MASK, check_identifier, check_read_only, is_pii
 from .warehouse import Warehouse
 
 
@@ -65,6 +65,11 @@ class DiffReport:
         return "\n".join(out).rstrip()
 
 
+def _differs(c: str) -> str:
+    """`l.c IS DISTINCT FROM r.c`, spelled so Redshift accepts it too."""
+    return f"(l.{c} <> r.{c} OR (l.{c} IS NULL AND r.{c} IS NOT NULL) OR (l.{c} IS NOT NULL AND r.{c} IS NULL))"
+
+
 def diff(
     wh: Warehouse,
     left_ref: str,
@@ -74,24 +79,27 @@ def diff(
     sample: int = 5,
 ) -> DiffReport:
     key = [check_identifier(k) for k in key]
-    left, right = wh.relation(left_ref), wh.relation(right_ref)
+    (left, lengine), (right, rengine) = wh.resolve(left_ref), wh.resolve(right_ref)
     if where:
         # `where` is agent-supplied, so run it through the same read-only check.
-        from .guardrails import check_read_only
-
         check_read_only(f"SELECT 1 WHERE {where}")
         left = f"(SELECT * FROM {left} WHERE {where})"
         right = f"(SELECT * FROM {right} WHERE {where})"
 
-    lcols, rcols = dict(wh.columns(left)), dict(wh.columns(right))
+    # Both sides in the same place: the diff runs there (e.g. entirely inside Redshift).
+    # Otherwise the warehouse side, already filtered, is copied next to the lake table.
+    engine = lengine
+    if lengine is not rengine:
+        left, right, engine = wh.localize(left, lengine), wh.localize(right, rengine), wh.local
+
+    lcols, rcols = dict(engine.columns(left)), dict(engine.columns(right))
     common = [c for c in lcols if c in rcols and c not in key]
     pii = wh.cfg.guardrails.pii_columns
 
-    q = wh.con.execute
     report = DiffReport(
         left=left_ref, right=right_ref, key=key,
-        left_rows=q(f"SELECT count(*) FROM {left}").fetchone()[0],
-        right_rows=q(f"SELECT count(*) FROM {right}").fetchone()[0],
+        left_rows=engine.scalar(f"SELECT count(*) FROM {left} AS _lz"),
+        right_rows=engine.scalar(f"SELECT count(*) FROM {right} AS _lz"),
         only_left=0, only_right=0, changed=0,
         columns_only_left=[c for c in lcols if c not in rcols],
         columns_only_right=[c for c in rcols if c not in lcols],
@@ -101,17 +109,16 @@ def diff(
     on = " AND ".join(f"l.{k} = r.{k}" for k in key)
     keys = ", ".join(f"l.{k}" for k in key)
     rkeys = ", ".join(f"r.{k}" for k in key)
-    anti = f"FROM {left} l ANTI JOIN {right} r ON {on}"
-    anti_r = f"FROM {right} r ANTI JOIN {left} l ON {on}"
-    report.only_left = q(f"SELECT count(*) {anti}").fetchone()[0]
-    report.only_right = q(f"SELECT count(*) {anti_r}").fetchone()[0]
+    anti = f"FROM {left} l WHERE NOT EXISTS (SELECT 1 FROM {right} r WHERE {on})"
+    anti_r = f"FROM {right} r WHERE NOT EXISTS (SELECT 1 FROM {left} l WHERE {on})"
+    report.only_left = engine.scalar(f"SELECT count(*) {anti}")
+    report.only_right = engine.scalar(f"SELECT count(*) {anti_r}")
 
     def rows(sql: str) -> list[dict]:
-        cur = q(sql)
-        cols = [d[0] for d in cur.description]
+        cols, data = engine.run(sql)
         return [
             {c: (MASK if is_pii(c, pii) and v is not None else v) for c, v in zip(cols, r)}
-            for r in cur.fetchall()
+            for r in data
         ]
 
     report.samples["only in left"] = rows(f"SELECT {keys} {anti} ORDER BY {keys} LIMIT {sample}")
@@ -119,9 +126,9 @@ def diff(
 
     if common:
         joined = f"FROM {left} l JOIN {right} r ON {on}"
-        flags = ", ".join(f"count(*) FILTER (l.{c} IS DISTINCT FROM r.{c}) AS {c}" for c in common)
-        any_diff = " OR ".join(f"l.{c} IS DISTINCT FROM r.{c}" for c in common)
-        counts = q(f"SELECT count(*) FILTER ({any_diff}), {flags} {joined}").fetchone()
+        flags = ", ".join(f"count(CASE WHEN {_differs(c)} THEN 1 END) AS {c}" for c in common)
+        any_diff = " OR ".join(_differs(c) for c in common)
+        counts = engine.run(f"SELECT count(CASE WHEN {any_diff} THEN 1 END), {flags} {joined}")[1][0]
         report.changed = counts[0]
         report.changed_by_column = {c: n for c, n in zip(common, counts[1:]) if n}
         changed_cols = list(report.changed_by_column)

@@ -35,6 +35,12 @@ def test_query_is_capped_and_masked(cfg):
     assert result.rows[1][2] is None  # nulls stay visible: "no email" is information
 
 
+def test_explain_is_not_wrapped(cfg):
+    with open_warehouse(cfg) as wh:
+        result = wh.query("explain select * from a.t")
+    assert result.rows
+
+
 def test_filesystem_is_off_limits(cfg):
     with open_warehouse(cfg) as wh, pytest.raises(GuardrailViolation):
         wh.query("select * from read_csv('/etc/hosts')")

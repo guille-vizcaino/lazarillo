@@ -85,7 +85,7 @@ Lazarillo only reads. A policy like this one is enough:
   compare a snapshot or partition you copy elsewhere, until pushdown lands.
 - DuckLake needs DuckDB's `ducklake` extension, and `httpfs` when its files live in S3.
   DuckDB downloads them on first use; install them once if you work offline.
-- The warehouse is still a DuckDB file. Redshift is next on the roadmap.
+- The warehouse can be a DuckDB file or Redshift; see [redshift.md](redshift.md).
 
 ## Testing without AWS
 
