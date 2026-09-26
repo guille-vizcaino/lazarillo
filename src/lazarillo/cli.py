@@ -1,0 +1,131 @@
+"""`lazarillo` command line. Every command prints Markdown so humans and agents read the same thing."""
+
+from __future__ import annotations
+
+import json
+from pathlib import Path
+
+import click
+import duckdb
+
+from . import __version__
+from .config import load_config
+from .context import DataMap
+from .diff import diff as run_diff
+from .guardrails import GuardrailViolation
+from .warehouse import open_warehouse
+
+
+def _cfg(ctx: click.Context):
+    return load_config(ctx.obj.get("config"))
+
+
+def _datamap(ctx: click.Context) -> DataMap:
+    cfg = _cfg(ctx)
+    if not cfg.dbt:
+        raise click.UsageError("No `dbt:` section in lazarillo.yml")
+    return DataMap.from_project(cfg.dbt.project_dir)
+
+
+@click.group()
+@click.version_option(__version__)
+@click.option("--config", "-c", type=click.Path(path_type=Path, exists=True), help="Path to lazarillo.yml")
+@click.pass_context
+def main(ctx: click.Context, config: Path | None) -> None:
+    """Lazarillo guides AI agents through your lakehouse: context, guardrails, verification."""
+    ctx.obj = {"config": config}
+
+
+@main.command("map")
+@click.pass_context
+def map_(ctx):
+    """Print the data map: sources, models, materializations and exposures."""
+    click.echo(_datamap(ctx).to_markdown())
+
+
+@main.command()
+@click.argument("model")
+@click.pass_context
+def describe(ctx, model):
+    """Everything about one model: columns, tests, code, upstream and downstream."""
+    click.echo(_datamap(ctx).describe(model))
+
+
+@main.command()
+@click.argument("model")
+@click.pass_context
+def impact(ctx, model):
+    """Which models and dashboards are affected if MODEL changes."""
+    models, exposures = _datamap(ctx).downstream(model)
+    click.echo(f"## Impact of `{model}`\n")
+    click.echo("Models: " + (", ".join(m.name for m in models) or "—"))
+    for e in exposures:
+        click.echo(f"- {e.name} ({e.type}, owner: {e.owner})")
+
+
+@main.command()
+@click.argument("sql")
+@click.option("--max-rows", type=int)
+@click.pass_context
+def query(ctx, sql, max_rows):
+    """Run one read-only SQL statement (row-capped, PII masked)."""
+    with open_warehouse(_cfg(ctx)) as wh:
+        try:
+            click.echo(wh.query(sql, max_rows).to_markdown())
+        except GuardrailViolation as e:
+            raise click.ClickException(f"Guardrail: {e}")
+        except duckdb.Error as e:
+            raise click.ClickException(str(e))
+
+
+@main.command()
+@click.argument("left")
+@click.argument("right")
+@click.option("--key", "-k", required=True, multiple=True, help="Key column(s); repeat for composite keys")
+@click.option("--where", help="Restrict both sides, e.g. \"ordered_at >= '2026-09-01'\"")
+@click.option("--json", "as_json", is_flag=True)
+@click.pass_context
+def diff(ctx, left, right, key, where, as_json):
+    """Compare two relations: source vs landing, Delta vs Iceberg, prod vs dev...
+
+    \b
+    lazarillo diff src.orders landing.orders -k order_id
+    lazarillo diff delta:data/landing/delta/orders iceberg:landing.orders -k order_id
+    """
+    with open_warehouse(_cfg(ctx)) as wh:
+        report = run_diff(wh, left, right, list(key), where)
+    click.echo(json.dumps(report.to_dict(), default=str, indent=2) if as_json else report.to_markdown())
+
+
+@main.command()
+@click.argument("model")
+@click.option("--key", "-k", multiple=True, help="Defaults to the model's unique_key")
+@click.option("--where", help="Only compare a window, e.g. the last 7 days")
+@click.pass_context
+def verify(ctx, model, key, where):
+    """Build MODEL in the dev schema and diff it against production."""
+    from .verify import verify as run_verify
+
+    report = run_verify(_cfg(ctx), model, list(key) or None, where)
+    click.echo(report.to_markdown())
+    if not report.dbt_ok:
+        ctx.exit(1)
+
+
+@main.command()
+@click.pass_context
+def mcp(ctx):
+    """Serve the harness over MCP (stdio) for Claude Code, Cursor and friends."""
+    from .mcp_server import build_server
+
+    build_server(_cfg(ctx)).run("stdio")
+
+
+@main.command()
+def checkride():
+    """Evaluate how well an agent does real data-engineering tasks (coming soon)."""
+    click.echo(
+        "checkride is on the roadmap: a benchmark of data tasks (fix a drifting incremental,\n"
+        "explain a revenue drop, validate a Delta → Iceberg migration) scored with and without\n"
+        "the harness. See docs/checkride.md."
+    )
