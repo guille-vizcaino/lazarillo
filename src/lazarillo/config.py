@@ -23,6 +23,9 @@ class DbtConfig:
     dev_target: str = "dev"
     prod_schema: str = "analytics"
     dev_schema: str = "dev"
+    # Where profiles.yml lives. None means: the project dir if it has one, else dbt's
+    # own default (DBT_PROFILES_DIR or ~/.dbt).
+    profiles_dir: Path | None = None
 
 
 @dataclass
@@ -62,8 +65,10 @@ def load_config(path: Path | None = None) -> Config:
     if dbt := raw.get("dbt"):
         cfg.dbt = DbtConfig(
             project_dir=resolve(dbt["project_dir"]),
-            **{k: v for k, v in dbt.items() if k != "project_dir"},
+            **{k: v for k, v in dbt.items() if k not in ("project_dir", "profiles_dir")},
         )
+        if dbt.get("profiles_dir"):
+            cfg.dbt.profiles_dir = resolve(str(Path(dbt["profiles_dir"]).expanduser()))
 
     if ice := (raw.get("landing") or {}).get("iceberg_catalog"):
         cfg.iceberg_catalog = {

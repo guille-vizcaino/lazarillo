@@ -1,3 +1,6 @@
+from pathlib import Path
+
+
 from lazarillo.context import DataMap
 
 MANIFEST = {
@@ -30,3 +33,16 @@ def test_describe_and_map():
     assert "unique(id)" in dm.describe("fct")
     text = dm.to_markdown()
     assert "incremental (default, key=id)" in text and "landing.orders" in text
+
+
+def test_profiles_dir_is_optional(tmp_path):
+    from lazarillo.config import load_config
+
+    (tmp_path / "lazarillo.yml").write_text(
+        "warehouse: {path: wh.duckdb}\ndbt: {project_dir: proj}\n"
+    )
+    assert load_config(tmp_path / "lazarillo.yml").dbt.profiles_dir is None
+    (tmp_path / "lazarillo.yml").write_text(
+        "warehouse: {path: wh.duckdb}\ndbt: {project_dir: proj, profiles_dir: ~/.dbt}\n"
+    )
+    assert load_config(tmp_path / "lazarillo.yml").dbt.profiles_dir == Path.home() / ".dbt"

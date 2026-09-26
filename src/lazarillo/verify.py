@@ -61,10 +61,13 @@ def build_dev(cfg: Config, select: str) -> tuple[bool, str]:
     d = cfg.dbt
     cmd = [
         dbt, "build", "--select", select, "--target", d.dev_target,
-        "--project-dir", str(d.project_dir), "--profiles-dir", str(d.project_dir),
+        "--project-dir", str(d.project_dir),
         # Keep the dev manifest apart so the data map keeps describing production.
         "--target-path", "target_dev",
     ]
+    profiles = d.profiles_dir or (d.project_dir if (d.project_dir / "profiles.yml").exists() else None)
+    if profiles:
+        cmd += ["--profiles-dir", str(profiles)]
     proc = subprocess.run(cmd, cwd=d.project_dir, capture_output=True, text=True)
     log = (proc.stdout + proc.stderr).strip().splitlines()
     return proc.returncode == 0, "\n".join(log[-25:])
