@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import sys
 from contextlib import contextmanager
 from pathlib import Path
 
@@ -54,19 +55,54 @@ def main(ctx: click.Context, config: Path | None) -> None:
 
 @main.command()
 @click.argument("directory", type=click.Path(path_type=Path, file_okay=False), default=".")
-@click.option("--warehouse", "-w", default="warehouse.duckdb", show_default=True,
-              help="DuckDB file the agent will read, relative to DIRECTORY")
+@click.option("--warehouse", "-w", help="duckdb or redshift (a path to a DuckDB file works too). "
+              "Default: the prod target of the dbt profile, else you are asked")
+@click.option("--path", "duckdb_path", help="DuckDB file, relative to DIRECTORY")
+@click.option("--host", help="Redshift host")
+@click.option("--database", help="Redshift database")
+@click.option("--port", type=int, help="Redshift port (default 5439)")
+@click.option("--user", help="Redshift user")
+@click.option("--iam/--no-iam", default=None, help="Sign in to Redshift with IAM instead of a password")
+@click.option("--cluster", "cluster_identifier", help="Provisioned cluster identifier, for IAM")
+@click.option("--workgroup", help="Serverless workgroup, for IAM")
+@click.option("--aws-profile", "profile", help="AWS profile for IAM (default: the AWS default chain)")
+@click.option("--password-env", help="Env var holding the Redshift password (default: PGPASSWORD or ~/.pgpass)")
 @click.option("--dbt-project", type=click.Path(path_type=Path, file_okay=False, exists=True),
               help="dbt project dir (default: the first dbt_project.yml found under DIRECTORY)")
+@click.option("--no-input", is_flag=True, help="Never ask; fail if a warehouse setting is missing")
 @click.option("--force", is_flag=True, help="Overwrite an existing lazarillo.yml")
-def init(directory, warehouse, dbt_project, force):
-    """Write a starter lazarillo.yml for your project."""
+def init(directory, warehouse, duckdb_path, dbt_project, no_input, force, **redshift):
+    """Write a starter lazarillo.yml for your project.
+
+    \b
+    The warehouse comes from the flags, then from the production target in dbt's
+    profiles.yml, then from a few questions. Passwords are never written to the file.
+    """
     from .init import init_project
 
+    given = {k: v for k, v in redshift.items() if v is not None}
+    if warehouse in ("duckdb", "redshift"):
+        given["type"] = warehouse
+    elif warehouse:
+        given["path"] = warehouse
+    if duckdb_path:
+        given["path"] = duckdb_path
+    if "type" not in given and "path" not in given and given:
+        given["type"] = "redshift"
+    ask = None if no_input or not _interactive() else _ask
     try:
-        click.echo(init_project(directory, warehouse, dbt_project, force))
-    except FileExistsError as e:
+        click.echo(init_project(directory, given, dbt_project, force, prompt=ask))
+    except (FileExistsError, ValueError) as e:
         raise click.ClickException(str(e))
+
+
+def _interactive() -> bool:
+    return sys.stdin.isatty()
+
+
+def _ask(text: str, default: str | None = None, choices: list[str] | None = None) -> str:
+    kind = click.Choice(choices) if choices else None
+    return click.prompt(text, default=default, type=kind, show_default=bool(default))
 
 
 @main.command("map")
