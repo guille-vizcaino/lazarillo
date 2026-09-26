@@ -5,8 +5,12 @@ Relations are addressed with short references:
     analytics.fct_orders             a table or view in the warehouse
     src.orders                       a table in an attached database (e.g. the source system)
     delta:landing/delta/orders       a Delta Lake table (path relative to lazarillo.yml)
-    iceberg:landing.orders           an Iceberg table in the configured catalog
-    parquet:landing/raw/*.parquet    a set of Parquet files
+    delta:s3://bucket/landing/orders a Delta Lake table in S3
+    iceberg:landing.orders           an Iceberg table in the configured catalog (SQL, Glue, REST...)
+    parquet:landing/raw/*.parquet    a set of Parquet files, local or s3://
+    lake.orders                      a table in an attached DuckLake
+
+Paths must sit inside `landing.locations`; Iceberg tables are reached through the catalog.
 """
 
 from __future__ import annotations
@@ -14,12 +18,14 @@ from __future__ import annotations
 import itertools
 from contextlib import contextmanager
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Iterator
 
 import duckdb
 
-from .config import Config
+from .config import Attachment, Config, is_uri
 from .guardrails import GuardrailViolation, check_identifier, check_read_only, mask_rows, with_row_limit
+from .lake import Lake, LakeError
 
 _counter = itertools.count()
 
@@ -41,34 +47,28 @@ class QueryResult:
 
 
 class Warehouse:
-    def __init__(self, cfg: Config, con: duckdb.DuckDBPyConnection):
+    def __init__(self, cfg: Config, con: duckdb.DuckDBPyConnection, lake: Lake | None = None):
         self.cfg = cfg
         self.con = con
+        self.lake = lake or Lake(cfg)
 
     def relation(self, ref: str) -> str:
         """Turn a reference into something that can follow FROM."""
         kind, _, target = ref.partition(":")
         if not target:
             return check_identifier(ref)
-        if kind == "delta":
-            from deltalake import DeltaTable
-
-            return self._register(DeltaTable(str(self.cfg.path(target))).to_pyarrow_dataset())
-        if kind == "iceberg":
-            from pyiceberg.catalog.sql import SqlCatalog
-
-            if not self.cfg.iceberg_catalog:
-                raise ValueError("No landing.iceberg_catalog configured in lazarillo.yml")
-            props = dict(self.cfg.iceberg_catalog)
-            catalog = SqlCatalog(props.pop("name", "default"), **props)
-            return self._register(catalog.load_table(target).scan().to_arrow())
-        if kind == "parquet":
-            import glob
-
-            import pyarrow.dataset as ds
-
-            return self._register(ds.dataset(sorted(glob.glob(str(self.cfg.path(target))))))
-        raise ValueError(f"Unknown relation kind {kind!r} in {ref!r}")
+        readers = {"delta": self.lake.delta, "iceberg": self.lake.iceberg, "parquet": self.lake.parquet}
+        if kind not in readers:
+            raise GuardrailViolation(f"Unknown relation kind {kind!r} in {ref!r}")
+        try:
+            return self._register(readers[kind](target))
+        except GuardrailViolation:
+            raise
+        except ImportError as e:
+            extra = "glue" if (self.cfg.iceberg_catalog or {}).get("type") == "glue" and kind == "iceberg" else kind
+            raise LakeError(f"Reading {kind} tables needs pip install 'lazarillo[{extra}]' ({e})") from e
+        except Exception as e:
+            raise LakeError(f"Could not read {ref!r}: {type(e).__name__}: {e}") from e
 
     def _register(self, arrow_obj) -> str:
         name = f"_lz_{next(_counter)}"
@@ -102,13 +102,55 @@ def open_warehouse(cfg: Config) -> Iterator[Warehouse]:
             f"No warehouse at {cfg.warehouse}. Point `warehouse.path` in lazarillo.yml at a DuckDB file."
         )
     con = duckdb.connect(str(cfg.warehouse), read_only=True)
+    lake = Lake(cfg)
     try:
-        for name, path in cfg.attach.items():
-            con.execute(f"ATTACH '{path}' AS {check_identifier(name)} (READ_ONLY)")
+        attached = [_attach(con, lake, check_identifier(name), att) for name, att in cfg.attach.items()]
+        if lake_dirs := [d for d in attached if d]:
+            # DuckLake reads its Parquet files through DuckDB, so those folders, and only
+            # those, stay readable once external access is off.
+            current = con.execute("SELECT current_setting('allowed_directories')").fetchone()[0]
+            dirs = ", ".join(_sql_str(d) for d in [*current, *lake_dirs])
+            con.execute(f"SET allowed_directories = [{dirs}]")
         # From here on SQL cannot touch the filesystem (read_csv('/etc/...'), COPY, ATTACH...).
-        # Lake tables are read by Python and handed to DuckDB as Arrow instead.
+        # Other lake tables are read by Python and handed to DuckDB as Arrow instead.
         con.execute("SET enable_external_access = false")
         con.execute("SET lock_configuration = true")
-        yield Warehouse(cfg, con)
+        yield Warehouse(cfg, con, lake)
     finally:
         con.close()
+
+
+def _sql_str(value: str) -> str:
+    return "'" + value.replace("'", "''") + "'"
+
+
+def _attach(con: duckdb.DuckDBPyConnection, lake: Lake, name: str, att: Attachment) -> str | None:
+    """Attach read-only, before external access is switched off. Returns a DuckLake's data folder."""
+    if att.type == "duckdb":
+        con.execute(f"ATTACH {_sql_str(att.path)} AS {name} (READ_ONLY)")
+        return None
+
+    def attach(data_path: str | None) -> str:
+        # Read-only, so overriding the data path only affects this connection.
+        options = "READ_ONLY" + (f", DATA_PATH {_sql_str(data_path)}, OVERRIDE_DATA_PATH true" if data_path else "")
+        try:
+            con.execute(f"ATTACH {_sql_str('ducklake:' + att.path)} AS {name} ({options})")
+        except duckdb.Error as e:
+            if "ducklake" in str(e).lower() and "extension" in str(e).lower():
+                raise LakeError(
+                    "Attaching a DuckLake needs DuckDB's ducklake extension. Run once, with network: "
+                    "python -c \"import duckdb; duckdb.install_extension('ducklake')\""
+                ) from e
+            raise
+        return con.execute(f"SELECT data_path FROM ducklake_settings({_sql_str(name)})").fetchone()[0]
+
+    data_path = attach(att.data_path)
+    if not is_uri(data_path) and not Path(data_path).is_absolute():
+        # DuckLake resolves a relative data path against the working directory; anchor it
+        # to the catalog file instead so lazarillo works from any folder.
+        con.execute(f"DETACH {name}")
+        data_path = attach(str(Path(att.path).parent / data_path))
+    if is_uri(data_path):
+        # DuckLake reads S3 through DuckDB's httpfs, which takes credentials from a secret.
+        con.execute(lake.s3.duckdb_secret())
+    return data_path.rstrip("/") + "/"

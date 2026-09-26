@@ -123,7 +123,9 @@ Try: *"Finance says the payout for Los Tejados in Barcelona looks too high. Find
 | `lazarillo mcp` | Serve all of the above over MCP |
 
 Relations can be `schema.table`, `attached_db.table`, `delta:<path>`,
-`iceberg:<namespace.table>` or `parquet:<glob>`.
+`iceberg:<namespace.table>` or `parquet:<glob>`. Paths can be local or `s3://`, Iceberg
+catalogs can be SQL, AWS Glue or REST, and DuckLakes can be attached next to the
+warehouse. See [docs/aws.md](docs/aws.md).
 
 ## Scope
 
@@ -140,7 +142,8 @@ Lazarillo doesn't run your pipelines. It checks what they produce.
 - [x] Row-level diff across warehouse, Delta, Iceberg and Parquet
 - [x] `verify`: dev build, diff and blast radius
 - [x] MCP server
-- [ ] Redshift adapter and AWS Glue catalog for Iceberg
+- [x] Lake in S3 (Delta, Parquet, Iceberg), AWS Glue catalog and DuckLake
+- [ ] Redshift adapter
 - [ ] dbt Cloud: read the manifest from the Discovery API
 - [ ] `--defer` builds so `verify` doesn't rebuild parents
 - [ ] Cost guardrails (`EXPLAIN`-based scan budget)

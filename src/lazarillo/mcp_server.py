@@ -9,6 +9,7 @@ from .config import Config
 from .context import DataMap
 from .diff import diff as run_diff
 from .guardrails import GuardrailViolation
+from .lake import LakeError
 from .verify import verify as run_verify
 from .warehouse import open_warehouse
 
@@ -60,12 +61,14 @@ def build_server(cfg: Config) -> MCPServer:
     @server.tool()
     def diff(left: str, right: str, key: list[str], where: str | None = None) -> str:
         """Compare two relations row by row. Refs: `schema.table`, `src.table`,
-        `delta:<path>`, `iceberg:<namespace.table>`, `parquet:<glob>`."""
+        `delta:<path or s3://...>`, `iceberg:<namespace.table>`, `parquet:<glob or s3://...>`."""
         with open_warehouse(cfg) as wh:
             try:
                 return run_diff(wh, left, right, key, where).to_markdown()
             except GuardrailViolation as e:
                 return f"Refused by guardrail: {e}"
+            except LakeError as e:
+                return f"Lake error: {e}"
             except duckdb.Error as e:
                 return f"SQL error: {e}"
 

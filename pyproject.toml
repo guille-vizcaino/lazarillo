@@ -27,10 +27,12 @@ dependencies = [
 [project.optional-dependencies]
 delta = ["deltalake>=0.20"]
 iceberg = ["pyiceberg[sql-sqlite,pyarrow]>=0.8"]
+s3 = ["boto3>=1.34"]
+glue = ["lazarillo[iceberg,s3]", "pyiceberg[glue]>=0.8"]
 mcp = ["mcp>=2"]
 dbt = ["dbt-duckdb>=1.8"]
-all = ["lazarillo[delta,iceberg,dbt,mcp]"]
-dev = ["lazarillo[all]", "pytest>=8"]
+all = ["lazarillo[delta,iceberg,glue,dbt,mcp]"]
+dev = ["lazarillo[all]", "pytest>=8", "moto[server]>=5"]
 
 [project.scripts]
 lazarillo = "lazarillo.cli:main"
@@ -40,3 +42,4 @@ packages = ["src/lazarillo"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+markers = ["minio: runs against a real S3-compatible server (set LAZARILLO_TEST_S3_ENDPOINT)"]

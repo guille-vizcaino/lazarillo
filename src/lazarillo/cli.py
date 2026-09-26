@@ -14,6 +14,7 @@ from .config import load_config
 from .context import DataMap
 from .diff import diff as run_diff
 from .guardrails import GuardrailViolation
+from .lake import LakeError
 from .warehouse import open_warehouse
 
 
@@ -26,7 +27,7 @@ def _warehouse(ctx: click.Context):
     try:
         with open_warehouse(_cfg(ctx)) as wh:
             yield wh
-    except FileNotFoundError as e:
+    except (FileNotFoundError, LakeError) as e:
         raise click.ClickException(str(e))
 
 
@@ -118,9 +119,15 @@ def diff(ctx, left, right, key, where, as_json):
     \b
     lazarillo diff src.orders landing.orders -k order_id
     lazarillo diff delta:data/landing/delta/orders iceberg:landing.orders -k order_id
+    lazarillo diff delta:s3://my-lake/landing/orders iceberg:landing.orders -k order_id
     """
     with _warehouse(ctx) as wh:
-        report = run_diff(wh, left, right, list(key), where)
+        try:
+            report = run_diff(wh, left, right, list(key), where)
+        except GuardrailViolation as e:
+            raise click.ClickException(f"Guardrail: {e}")
+        except (LakeError, duckdb.Error) as e:
+            raise click.ClickException(str(e))
     click.echo(json.dumps(report.to_dict(), default=str, indent=2) if as_json else report.to_markdown())
 
 
