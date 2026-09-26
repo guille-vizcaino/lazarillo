@@ -1,8 +1,0 @@
-{
-  "mcpServers": {
-    "lazarillo": {
-      "command": ".venv/bin/lazarillo",
-      "args": ["-c", "examples/tarima-tickets/lazarillo.yml", "mcp"]
-    }
-  }
-}
