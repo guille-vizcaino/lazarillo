@@ -1,5 +1,6 @@
 import pytest
 
+from lazarillo.config import load_config
 from lazarillo.guardrails import GuardrailViolation, check_identifier, check_read_only
 from lazarillo.warehouse import open_warehouse
 
@@ -37,3 +38,10 @@ def test_query_is_capped_and_masked(cfg):
 def test_filesystem_is_off_limits(cfg):
     with open_warehouse(cfg) as wh, pytest.raises(GuardrailViolation):
         wh.query("select * from read_csv('/etc/hosts')")
+
+
+def test_missing_warehouse_is_explained(tmp_path):
+    (tmp_path / "lazarillo.yml").write_text("warehouse:\n  path: nope.duckdb\n")
+    with pytest.raises(FileNotFoundError, match="warehouse.path"):
+        with open_warehouse(load_config(tmp_path / "lazarillo.yml")):
+            pass

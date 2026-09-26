@@ -5,8 +5,8 @@ A *checkride* is the practical exam a pilot flies with an examiner before gettin
 
 ## Idea
 
-Every task starts from a broken but realistic platform (the Tarima Tickets demo plus a
-scenario patch). The agent has to reach a verifiable end state. Each task is scored by
+Every task starts from a broken but realistic platform (the Tarima Tickets demo in
+`examples/tarima-tickets` plus a scenario patch). The agent has to reach a verifiable end state. Each task is scored by
 checks the harness can run, never by an LLM judge:
 
 | task | the agent must… | pass when |
@@ -22,5 +22,5 @@ access), for every model under test. The headline number is how much the harness
 ## Open questions
 
 - Scenario format: a YAML file plus a patch applied to the demo project?
-- Isolation: a fresh copy of `demo/data` per run.
+- Isolation: a fresh copy of `examples/tarima-tickets/data` per run.
 - Reporting: Markdown table plus JSON, easy to publish.

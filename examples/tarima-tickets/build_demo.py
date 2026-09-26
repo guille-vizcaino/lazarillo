@@ -13,7 +13,7 @@ Three problems are planted on purpose:
 3. Incremental drift: `fct_orders` only picks up rows with a newer `ordered_at`, so
    refunds of older orders never reach production and promoters get overpaid.
 
-Run from the repo root:  python demo/build_demo.py
+Run from the repo root:  python examples/tarima-tickets/build_demo.py
 """
 
 from __future__ import annotations
@@ -182,7 +182,7 @@ def main():
     write_iceberg(today)
     load_warehouse(today, events_t)
     dbt("build", "--target", "prod")
-    print("✔ demo ready in demo/data — try: cd demo && lazarillo map")
+    print(f"✔ demo ready in {DATA} — try: cd {HERE} && lazarillo map")
 
 
 if __name__ == "__main__":

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from contextlib import contextmanager
 from pathlib import Path
 
 import click
@@ -20,6 +21,15 @@ def _cfg(ctx: click.Context):
     return load_config(ctx.obj.get("config"))
 
 
+@contextmanager
+def _warehouse(ctx: click.Context):
+    try:
+        with open_warehouse(_cfg(ctx)) as wh:
+            yield wh
+    except FileNotFoundError as e:
+        raise click.ClickException(str(e))
+
+
 def _datamap(ctx: click.Context) -> DataMap:
     cfg = _cfg(ctx)
     if not cfg.dbt:
@@ -34,6 +44,23 @@ def _datamap(ctx: click.Context) -> DataMap:
 def main(ctx: click.Context, config: Path | None) -> None:
     """Lazarillo guides AI agents through your lakehouse: context, guardrails, verification."""
     ctx.obj = {"config": config}
+
+
+@main.command()
+@click.argument("directory", type=click.Path(path_type=Path, file_okay=False), default=".")
+@click.option("--warehouse", "-w", default="warehouse.duckdb", show_default=True,
+              help="DuckDB file the agent will read, relative to DIRECTORY")
+@click.option("--dbt-project", type=click.Path(path_type=Path, file_okay=False, exists=True),
+              help="dbt project dir (default: the first dbt_project.yml found under DIRECTORY)")
+@click.option("--force", is_flag=True, help="Overwrite an existing lazarillo.yml")
+def init(directory, warehouse, dbt_project, force):
+    """Write a starter lazarillo.yml for your project."""
+    from .init import init_project
+
+    try:
+        click.echo(init_project(directory, warehouse, dbt_project, force))
+    except FileExistsError as e:
+        raise click.ClickException(str(e))
 
 
 @main.command("map")
@@ -69,7 +96,7 @@ def impact(ctx, model):
 @click.pass_context
 def query(ctx, sql, max_rows):
     """Run one read-only SQL statement (row-capped, PII masked)."""
-    with open_warehouse(_cfg(ctx)) as wh:
+    with _warehouse(ctx) as wh:
         try:
             click.echo(wh.query(sql, max_rows).to_markdown())
         except GuardrailViolation as e:
@@ -92,7 +119,7 @@ def diff(ctx, left, right, key, where, as_json):
     lazarillo diff src.orders landing.orders -k order_id
     lazarillo diff delta:data/landing/delta/orders iceberg:landing.orders -k order_id
     """
-    with open_warehouse(_cfg(ctx)) as wh:
+    with _warehouse(ctx) as wh:
         report = run_diff(wh, left, right, list(key), where)
     click.echo(json.dumps(report.to_dict(), default=str, indent=2) if as_json else report.to_markdown())
 

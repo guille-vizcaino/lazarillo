@@ -25,17 +25,32 @@ Agents already write decent SQL. They fail in three other ways:
 The picaresque twist: Lázaro famously tricks the blind man. So the harness **never trusts
 the agent's word**. Every claim comes with a diff.
 
-## Quickstart (2 minutes, no cloud account)
+## Use it on your project
+
+```bash
+pip install "lazarillo[all] @ git+https://github.com/guille-vizcaino/lazarillo"
+cd your-project
+lazarillo init                # writes lazarillo.yml and finds your dbt project, if any
+lazarillo query "select 42"
+```
+
+`lazarillo init` prints the `.mcp.json` block that hands the harness to your agent. The core
+only needs DuckDB; pick extras for the rest of your stack: `delta`, `iceberg`, `dbt`, `mcp`,
+or `all`. Without dbt you still get `query` and `diff`; add a dbt project to unlock `map`,
+`describe`, `impact` and `verify`.
+
+## Try the demo (2 minutes, no cloud account)
 
 ```bash
 git clone https://github.com/guille-vizcaino/lazarillo && cd lazarillo
 python -m venv .venv && source .venv/bin/activate
-pip install -e ".[dev]"
-python demo/build_demo.py      # builds Tarima Tickets, a fictional concert ticketing company
-cd demo && lazarillo map
+pip install -e ".[all]"
+python examples/tarima-tickets/build_demo.py   # builds Tarima Tickets, a fictional concert ticketing company
+cd examples/tarima-tickets && lazarillo map
 ```
 
-The demo mirrors a common AWS setup (ticketing system → S3 landing in Delta, migrating
+The demo lives in [`examples/tarima-tickets`](examples/tarima-tickets) and uses Lazarillo
+exactly like your project would: its own `lazarillo.yml`, dbt project and data. It mirrors a common AWS setup (ticketing system → S3 landing in Delta, migrating
 to Iceberg → warehouse → dbt → Power BI) on DuckDB. Three problems are planted in it,
 the kind that reach production every week:
 
@@ -85,10 +100,10 @@ production. The revenue-by-event dashboard overstates what each promoter is owed
 ## Use it with an agent
 
 ```bash
-lazarillo -c demo/lazarillo.yml mcp     # MCP over stdio
+lazarillo -c examples/tarima-tickets/lazarillo.yml mcp     # MCP over stdio
 ```
 
-This repo ships a `.mcp.json`, so opening it in Claude Code gives the agent these tools:
+This repo ships a `.mcp.json` wired to the demo, so opening it in Claude Code gives the agent these tools:
 `data_map`, `describe_model`, `impact`, `query`, `diff` and `verify`. The server also sends
 instructions that tell the agent to verify before it claims success.
 
@@ -98,6 +113,7 @@ Try: *"Finance says the payout for Los Tejados in Barcelona looks too high. Find
 
 | command | what it does |
 |---|---|
+| `lazarillo init [DIR]` | Write a starter `lazarillo.yml` and print the MCP config |
 | `lazarillo map` | Sources, models, materializations, exposures |
 | `lazarillo describe MODEL` | Columns, tests, SQL, upstream and downstream |
 | `lazarillo impact MODEL` | Downstream models and dashboards |

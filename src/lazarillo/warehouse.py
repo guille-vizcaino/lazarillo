@@ -97,6 +97,10 @@ class Warehouse:
 @contextmanager
 def open_warehouse(cfg: Config) -> Iterator[Warehouse]:
     """Open the warehouse read-only. The connection is short-lived so dbt can take the lock."""
+    if not cfg.warehouse.exists():
+        raise FileNotFoundError(
+            f"No warehouse at {cfg.warehouse}. Point `warehouse.path` in lazarillo.yml at a DuckDB file."
+        )
     con = duckdb.connect(str(cfg.warehouse), read_only=True)
     try:
         for name, path in cfg.attach.items():
