@@ -69,14 +69,18 @@ def main(ctx: click.Context, config: Path | None) -> None:
 @click.option("--password-env", help="Env var holding the Redshift password (default: PGPASSWORD or ~/.pgpass)")
 @click.option("--dbt-project", type=click.Path(path_type=Path, file_okay=False, exists=True),
               help="dbt project dir (default: the first dbt_project.yml found under DIRECTORY)")
+@click.option("--mcp", "mcp", multiple=True, type=click.Choice(["claude-code", "cursor", "vscode", "none"]),
+              help="Register the MCP server for this agent (repeatable). Default: ask in a terminal, "
+              "else just print the config. With an existing lazarillo.yml, only this is done")
 @click.option("--no-input", is_flag=True, help="Never ask; fail if a warehouse setting is missing")
 @click.option("--force", is_flag=True, help="Overwrite an existing lazarillo.yml")
-def init(directory, warehouse, duckdb_path, dbt_project, no_input, force, **redshift):
+def init(directory, warehouse, duckdb_path, dbt_project, mcp, no_input, force, **redshift):
     """Write a starter lazarillo.yml for your project.
 
     \b
     The warehouse comes from the flags, then from the production target in dbt's
     profiles.yml, then from a few questions. Passwords are never written to the file.
+    Then it registers the MCP server for your agent: Claude Code, Cursor or VS Code.
     """
     from .init import init_project
 
@@ -91,7 +95,8 @@ def init(directory, warehouse, duckdb_path, dbt_project, no_input, force, **reds
         given["type"] = "redshift"
     ask = None if no_input or not _interactive() else _ask
     try:
-        click.echo(init_project(directory, given, dbt_project, force, prompt=ask))
+        clients = [c for c in mcp if c != "none"] if mcp else None
+        click.echo(init_project(directory, given, dbt_project, force, prompt=ask, mcp=clients))
     except (FileExistsError, ValueError) as e:
         raise click.ClickException(str(e))
 
