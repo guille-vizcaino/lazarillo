@@ -305,3 +305,14 @@ def test_pg_cli(pg_cfg):
     out = CliRunner().invoke(main, ["-c", config, "query", f"select nope from {s}_a.t"])
     assert out.exit_code == 1 and "nope" in out.output
 
+
+@pytest.mark.postgres
+def test_pg_doctor(pg_cfg):
+    from lazarillo.doctor import doctor
+
+    cfg, s = pg_cfg
+    report = doctor(cfg.root / "lazarillo.yml")
+    text = report.to_markdown()
+    assert report.ok, text
+    assert f"as `{cfg.redshift.user}`" in text and f"`{s}_a` (1)" in text
+    assert {c.title: c.status for c in report.checks}["Read-only"] == "ok"

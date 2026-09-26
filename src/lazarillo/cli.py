@@ -105,6 +105,18 @@ def _ask(text: str, default: str | None = None, choices: list[str] | None = None
     return click.prompt(text, default=default, type=kind, show_default=bool(default))
 
 
+@main.command()
+@click.pass_context
+def doctor(ctx):
+    """Check the config, the connection, the read-only guard and the dbt manifest."""
+    from .doctor import doctor as run_doctor
+
+    report = run_doctor(ctx.obj.get("config"))
+    click.echo(report.to_markdown())
+    if not report.ok:
+        ctx.exit(1)
+
+
 @main.command("map")
 @click.pass_context
 def map_(ctx):
@@ -196,7 +208,7 @@ def mcp(ctx):
     """Serve the harness over MCP (stdio) for Claude Code, Cursor and friends."""
     from .mcp_server import build_server
 
-    build_server(_cfg(ctx)).run("stdio")
+    build_server(_cfg(ctx), ctx.obj.get("config")).run("stdio")
 
 
 @main.command()

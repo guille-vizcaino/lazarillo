@@ -2,12 +2,15 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import duckdb
 from mcp.server.mcpserver import MCPServer
 
-from .config import Config
+from .config import CONFIG_NAME, Config
 from .context import DataMap
 from .diff import diff as run_diff
+from .doctor import doctor as run_doctor
 from .guardrails import GuardrailViolation
 from .engine import WarehouseError
 from .lake import LakeError
@@ -24,7 +27,7 @@ You are working on a data platform through Lazarillo, a harness that can see wha
 """
 
 
-def build_server(cfg: Config) -> MCPServer:
+def build_server(cfg: Config, config_path: Path | None = None) -> MCPServer:
     server = MCPServer("lazarillo", instructions=INSTRUCTIONS)
 
     def datamap() -> DataMap:
@@ -81,5 +84,11 @@ def build_server(cfg: Config) -> MCPServer:
             return run_verify(cfg, model, where=where).to_markdown()
         except WarehouseError as e:
             return f"SQL error: {e}"
+
+    @server.tool()
+    def doctor() -> str:
+        """Check the setup: config, warehouse connection, read-only guard, visible tables
+        and the dbt manifest. Run it when a tool fails in a way that looks like setup."""
+        return run_doctor(config_path or cfg.root / CONFIG_NAME).to_markdown()
 
     return server
