@@ -7,6 +7,7 @@ its own `lazarillo.yml`, dbt project (`tarima/`) and data (`data/`, generated).
 pip install -e "../..[all]"     # from this folder, or ".[all]" from the repo root
 python build_demo.py            # source system, Delta and Iceberg landing, warehouse, dbt build
 lazarillo map
+lazarillo init --mcp claude-code   # keeps lazarillo.yml, registers the MCP server (or cursor, vscode)
 ```
 
 Three problems are planted on purpose (late box office sales, a UTC shift in the Iceberg

@@ -38,8 +38,10 @@ lazarillo doctor              # checks the connection, the read-only guard and t
 asks only for what is missing (with dbt Cloud, that is the host, database and how you sign in).
 Passwords never go in `lazarillo.yml`: it names the env var, `~/.pgpass` or IAM instead.
 `lazarillo doctor` then connects with the guardrails on, confirms the warehouse refuses
-writes, and lists the tables the agent can see. `init` also prints the `.mcp.json` block that
-hands the harness to your agent. The core only needs DuckDB; pick extras for the rest of your stack: `delta`, `iceberg`, `s3`, `glue`,
+writes, and lists the tables the agent can see. `init` also registers the MCP server for your
+agent: it asks which one (Claude Code, Cursor or VS Code), or takes `--mcp claude-code`, and
+adds a `lazarillo` entry to that agent's project config without touching other servers.
+The core only needs DuckDB; pick extras for the rest of your stack: `delta`, `iceberg`, `s3`, `glue`,
 `redshift`, `dbt`, `mcp`, or `all`. Without dbt you still get `query` and `diff`; add a dbt project to unlock `map`,
 `describe`, `impact` and `verify`. If production runs in dbt Cloud, the map can come from
 your production job instead ([docs/dbt-cloud.md](https://github.com/guille-vizcaino/lazarillo/blob/main/docs/dbt-cloud.md)).
@@ -105,10 +107,12 @@ production. The revenue-by-event dashboard overstates what each promoter is owed
 ## Use it with an agent
 
 ```bash
-lazarillo -c examples/tarima-tickets/lazarillo.yml mcp     # MCP over stdio
+cd examples/tarima-tickets
+lazarillo init --mcp claude-code    # keeps the demo's lazarillo.yml, writes .mcp.json (or cursor, vscode)
+claude                              # or open the folder in your agent
 ```
 
-This repo ships a `.mcp.json` wired to the demo, so opening it in Claude Code gives the agent these tools:
+The agent then gets these tools, served over stdio by `lazarillo mcp`:
 `data_map`, `describe_model`, `impact`, `query`, `diff`, `verify` and `doctor`. The server also sends
 instructions that tell the agent to verify before it claims success.
 
@@ -118,7 +122,7 @@ Try: *"Finance says the payout for Los Tejados in Barcelona looks too high. Find
 
 | command | what it does |
 |---|---|
-| `lazarillo init [DIR]` | Write `lazarillo.yml` from your dbt profile (or a few questions) and print the MCP config |
+| `lazarillo init [DIR]` | Write `lazarillo.yml` from your dbt profile (or a few questions) and register the MCP server |
 | `lazarillo doctor` | Check the connection, the read-only guard, visible tables and the manifest |
 | `lazarillo map` | Sources, models, materializations, exposures |
 | `lazarillo describe MODEL` | Columns, tests, SQL, upstream and downstream |

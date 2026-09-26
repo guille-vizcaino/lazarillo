@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.1.2
+
+- `lazarillo init` registers the MCP server for your agent: Claude Code (`.mcp.json`),
+  Cursor (`.cursor/mcp.json`) or VS Code (`.vscode/mcp.json`). It asks in a terminal,
+  defaulting to the agents the project already has settings for, or takes `--mcp`. Other
+  servers in those files are kept. On a project with a `lazarillo.yml`, `init --mcp` only does this.
+- The repo no longer ships a `.mcp.json` at its root; the demo gets one from `init --mcp`.
+
 ## 0.1.1
 
 - `lazarillo init` reads the warehouse from the production target in dbt's `profiles.yml`

@@ -8,14 +8,13 @@ from __future__ import annotations
 
 import json
 import os
-import shutil
-import sys
 from pathlib import Path
 from typing import Callable
 
 import yaml
 
 from .config import CONFIG_NAME
+from .mcp_setup import CLIENTS, check, detect_clients, install, parse_clients, server_entry
 from .profiles import DbtTarget, read_target, workgroup_from_host
 
 SKIP_DIRS = {".venv", "venv", "node_modules", "dbt_packages", "target", "target_dev", ".git"}
@@ -176,11 +175,6 @@ def render_config(warehouse: dict | str, dbt: dict | None = None) -> str:
     return TEMPLATE.format(warehouse=section, dbt=dbt_text)
 
 
-def _lazarillo_command() -> str:
-    local = Path(sys.executable).parent / "lazarillo"  # same virtualenv as this process
-    return str(local) if local.exists() else (shutil.which("lazarillo") or "lazarillo")
-
-
 def _describe(wh: dict, directory: Path) -> str:
     if _kind(wh) == "duckdb":
         path = Path(wh["path"]) if Path(wh["path"]).is_absolute() else directory / wh["path"]
@@ -194,17 +188,41 @@ def _describe(wh: dict, directory: Path) -> str:
     return f"Redshift `{wh['host']}`, database `{wh['database']}`, {auth}"
 
 
+def ask_mcp(directory: Path, prompt: Prompt) -> list[str]:
+    default = ",".join(detect_clients(directory)) or "claude-code"
+    answer = prompt(f"Set up the MCP server for ({', '.join(CLIENTS)} or none; comma-separated)", default=default)
+    return parse_clients(answer)
+
+
+def _mcp_steps(config: Path, mcp: list[str], first: int) -> list[str]:
+    if mcp:
+        labels = " and ".join(CLIENTS[c].label for c in mcp)
+        return [f"{first}. Reload {labels} so the agent picks up the `lazarillo` tools. "
+                "The paths in the MCP file are absolute to this machine, so keep it out of git or edit them."]
+    block = {"mcpServers": {"lazarillo": server_entry(config)}}
+    return [f"{first}. Give it to your agent: `lazarillo init --mcp claude-code` (or cursor, vscode) "
+            "writes this for you, or add it by hand, e.g. in `.mcp.json`:",
+            "", "```json", json.dumps(block, indent=2), "```"]
+
+
 def init_project(directory: Path, warehouse: dict | str | None = None, dbt_project: Path | None = None,
-                 force: bool = False, prompt: Prompt | None = None) -> str:
-    """Write lazarillo.yml into directory and return what was found and next steps as Markdown.
+                 force: bool = False, prompt: Prompt | None = None, mcp: list[str] | None = None) -> str:
+    """Write lazarillo.yml into directory, set up the agent's MCP config, and return what
+    was found and next steps as Markdown.
 
     `warehouse` holds the settings given as flags (a string is a DuckDB path). Whatever
     they leave out comes from the dbt profile, then from `prompt` if there is one.
+    `mcp` names the clients to configure; None means ask (with a prompt) or just print.
+    With an existing lazarillo.yml and no `force`, only the MCP config is written.
     """
     directory = directory.resolve()
     target = directory / CONFIG_NAME
     if target.exists() and not force:
-        raise FileExistsError(f"{target} already exists; pass --force to overwrite it")
+        if not mcp:
+            raise FileExistsError(f"{target} already exists; pass --force to overwrite it, "
+                                  "or --mcp CLIENT to only set up your agent")
+        out = [f"## Kept `{target}`", "", *install(directory, target, mcp), "", "### Next steps"]
+        return "\n".join(out + _mcp_steps(target, mcp, 1))
 
     given = {"path": warehouse} if isinstance(warehouse, str) else dict(warehouse or {})
     given = {k: v for k, v in given.items() if v not in (None, "")}
@@ -234,24 +252,23 @@ def init_project(directory: Path, warehouse: dict | str | None = None, dbt_proje
             "prod_schema": (found.schema if found and found.schema else "analytics"),
             "dev_schema": (found.dev_schema if found and found.dev_schema else "dev"),
         }
+    if mcp is None:
+        mcp = ask_mcp(directory, prompt) if prompt else []
+    check(directory, mcp)
     directory.mkdir(parents=True, exist_ok=True)
     target.write_text(render_config(wh, dbt))
 
-    mcp = {"mcpServers": {"lazarillo": {"command": _lazarillo_command(), "args": ["-c", str(target), "mcp"]}}}
     out = [f"## Wrote `{target}`", "", f"- warehouse: {_describe(wh, directory)}"]
     if from_profile:
         out.append(f"- read from `{found.profiles_path}` (profile `{found.profile}`, target `{found.target}`)")
     out.append(f"- dbt project: `{dbt['project_dir']}`" if dbt else "- dbt project: none found (map, describe and verify stay off)")
     out += [f"- note: {n}" for n in (found.notes if found else [])]
+    out += install(directory, target, mcp)
     out += [
         "",
         "### Next steps",
         "1. Check the connection, the read-only guard and the dbt manifest: `lazarillo doctor`",
         "2. Review the file: attach extra databases, set PII columns and the row cap.",
-        "3. Give it to your agent, e.g. in `.mcp.json` for Claude Code:",
-        "",
-        "```json",
-        json.dumps(mcp, indent=2),
-        "```",
+        *_mcp_steps(target, mcp, 3),
     ]
     return "\n".join(out)

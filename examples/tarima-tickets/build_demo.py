@@ -183,6 +183,7 @@ def main():
     load_warehouse(today, events_t)
     dbt("build", "--target", "prod")
     print(f"✔ demo ready in {DATA} — try: cd {HERE} && lazarillo map")
+    print("  hand it to your agent: lazarillo init --mcp claude-code   (or cursor, vscode)")
 
 
 if __name__ == "__main__":

@@ -1,3 +1,5 @@
+import json
+
 import pytest
 
 from lazarillo.config import load_config
@@ -169,9 +171,53 @@ def test_cli_init_asks_in_a_terminal(tmp_path, monkeypatch):
     from lazarillo import cli
 
     monkeypatch.setattr(cli, "_interactive", lambda: True)
-    out = CliRunner().invoke(cli.main, ["init", str(tmp_path)], input="duckdb\ndata/wh.duckdb\n")
+    out = CliRunner().invoke(cli.main, ["init", str(tmp_path)], input="duckdb\ndata/wh.duckdb\ncursor\n")
     assert out.exit_code == 0, out.output
     assert load_config(tmp_path / "lazarillo.yml").warehouse == tmp_path / "data" / "wh.duckdb"
+    assert "lazarillo" in json.loads((tmp_path / ".cursor" / "mcp.json").read_text())["mcpServers"]
 
     out = CliRunner().invoke(cli.main, ["init", str(tmp_path), "--force", "--no-input", "-w", "redshift"])
     assert out.exit_code == 1 and "--host" in out.output
+
+
+# --- the agent's MCP config ----------------------------------------------------------------
+
+def test_mcp_is_only_printed_without_a_choice(tmp_path):
+    out = init_project(tmp_path)
+    assert '"mcpServers"' in out and not (tmp_path / ".mcp.json").exists()
+
+
+def test_mcp_keeps_other_servers_and_uses_each_client_format(tmp_path):
+    (tmp_path / ".mcp.json").write_text('{"mcpServers": {"other": {"command": "x"}}}')
+    out = init_project(tmp_path, mcp=["claude-code", "vscode"])
+
+    claude = json.loads((tmp_path / ".mcp.json").read_text())["mcpServers"]
+    assert claude["other"] == {"command": "x"}
+    assert claude["lazarillo"]["args"] == ["-c", str(tmp_path / "lazarillo.yml"), "mcp"]
+    vscode = json.loads((tmp_path / ".vscode" / "mcp.json").read_text())["servers"]["lazarillo"]
+    assert vscode["type"] == "stdio"
+    assert "added `lazarillo` in `.mcp.json` (Claude Code)" in out and "Reload Claude Code and VS Code" in out
+
+
+def test_mcp_only_on_an_existing_project(tmp_path):
+    init_project(tmp_path, "a.duckdb")
+    out = init_project(tmp_path, mcp=["cursor"])
+    assert out.startswith("## Kept") and load_config(tmp_path / "lazarillo.yml").warehouse.name == "a.duckdb"
+    assert "updated" in init_project(tmp_path, mcp=["cursor"])
+    with pytest.raises(FileExistsError, match="--mcp"):
+        init_project(tmp_path)
+
+
+def test_mcp_prompt_defaults_to_the_clients_in_the_project(tmp_path):
+    (tmp_path / ".cursor").mkdir()
+    ask = Answers()
+    init_project(tmp_path, prompt=ask)
+    assert (tmp_path / ".cursor" / "mcp.json").exists() and not (tmp_path / ".mcp.json").exists()
+
+
+def test_broken_mcp_file_is_not_overwritten(tmp_path):
+    (tmp_path / ".mcp.json").write_text("{not json")
+    with pytest.raises(ValueError, match="not valid JSON"):
+        init_project(tmp_path, mcp=["claude-code"])
+    assert (tmp_path / ".mcp.json").read_text() == "{not json"
+    assert not (tmp_path / "lazarillo.yml").exists()

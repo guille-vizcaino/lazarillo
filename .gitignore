@@ -12,4 +12,8 @@ examples/*/*/target/
 examples/*/*/target_dev/
 examples/*/*/logs/
 examples/*/*/dbt_packages/
+# MCP configs written by `lazarillo init --mcp`, with paths to this machine
+examples/*/.mcp.json
+examples/*/.cursor/
+examples/*/.vscode/
 .user.yml
