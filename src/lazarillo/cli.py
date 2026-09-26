@@ -12,6 +12,7 @@ import duckdb
 from . import __version__
 from .config import load_config
 from .context import DataMap
+from .dbt_cloud import DbtCloudError
 from .diff import diff as run_diff
 from .guardrails import GuardrailViolation
 from .lake import LakeError
@@ -35,7 +36,10 @@ def _datamap(ctx: click.Context) -> DataMap:
     cfg = _cfg(ctx)
     if not cfg.dbt:
         raise click.UsageError("No `dbt:` section in lazarillo.yml")
-    return DataMap.from_project(cfg.dbt.project_dir)
+    try:
+        return DataMap.from_config(cfg)
+    except (FileNotFoundError, DbtCloudError) as e:
+        raise click.ClickException(str(e))
 
 
 @click.group()

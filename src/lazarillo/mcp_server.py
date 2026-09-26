@@ -27,7 +27,7 @@ def build_server(cfg: Config) -> MCPServer:
     server = MCPServer("lazarillo", instructions=INSTRUCTIONS)
 
     def datamap() -> DataMap:
-        return DataMap.from_project(cfg.dbt.project_dir)
+        return DataMap.from_config(cfg)
 
     @server.tool()
     def data_map() -> str:

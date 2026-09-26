@@ -37,7 +37,8 @@ lazarillo query "select 42"
 `lazarillo init` prints the `.mcp.json` block that hands the harness to your agent. The core
 only needs DuckDB; pick extras for the rest of your stack: `delta`, `iceberg`, `dbt`, `mcp`,
 or `all`. Without dbt you still get `query` and `diff`; add a dbt project to unlock `map`,
-`describe`, `impact` and `verify`.
+`describe`, `impact` and `verify`. If production runs in dbt Cloud, the map can come from
+your production job instead ([docs/dbt-cloud.md](docs/dbt-cloud.md)).
 
 ## Try the demo (2 minutes, no cloud account)
 
@@ -144,7 +145,7 @@ Lazarillo doesn't run your pipelines. It checks what they produce.
 - [x] MCP server
 - [x] Lake in S3 (Delta, Parquet, Iceberg), AWS Glue catalog and DuckLake
 - [ ] Redshift adapter
-- [ ] dbt Cloud: read the manifest from the Discovery API
+- [x] dbt Cloud: read the manifest of the production job
 - [ ] `--defer` builds so `verify` doesn't rebuild parents
 - [ ] Cost guardrails (`EXPLAIN`-based scan budget)
 - [ ] **`lazarillo checkride`**: a benchmark of real data-engineering tasks, scored with

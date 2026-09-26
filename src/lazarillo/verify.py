@@ -74,9 +74,9 @@ def build_dev(cfg: Config, select: str) -> tuple[bool, str]:
 
 
 def verify(cfg: Config, model: str, key: list[str] | None = None, where: str | None = None) -> VerifyReport:
-    if not cfg.dbt:
-        raise ValueError("verify needs a `dbt:` section in lazarillo.yml")
-    dm = DataMap.from_project(cfg.dbt.project_dir)
+    if not cfg.dbt or not cfg.dbt.project_dir:
+        raise ValueError("verify builds locally: set dbt.project_dir in lazarillo.yml")
+    dm = DataMap.from_config(cfg)
     m = dm.model(model)
     key = key or ([m.unique_key] if isinstance(m.unique_key, str) else m.unique_key)
     if not key:

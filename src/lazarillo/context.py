@@ -6,6 +6,12 @@ import json
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from .config import Config
+from .dbt_cloud import DbtCloudError, fetch_manifest
+
+# Downloaded manifests are cached here, next to lazarillo.yml.
+CACHE_DIR = ".lazarillo"
+
 
 @dataclass
 class Model:
@@ -34,7 +40,9 @@ class Exposure:
 
 
 class DataMap:
-    def __init__(self, manifest: dict):
+    def __init__(self, manifest: dict, origin: str = ""):
+        # Where the manifest came from, shown on the map so a stale one is visible.
+        self.origin = origin
         self.nodes: dict[str, Model] = {}
         self.sources: dict[str, str] = {}
         self.exposures: dict[str, Exposure] = {}
@@ -80,6 +88,21 @@ class DataMap:
         if not path.exists():
             raise FileNotFoundError(f"{path} not found: run `dbt parse` (or `dbt build`) first")
         return cls(json.loads(path.read_text()))
+
+    @classmethod
+    def from_config(cls, cfg: Config) -> "DataMap":
+        """The dbt Cloud job's manifest if configured, else (or if it fails) the local one."""
+        d = cfg.dbt
+        if not d.cloud:
+            return cls.from_project(d.project_dir)
+        try:
+            return cls(*fetch_manifest(d.cloud, cfg.root / CACHE_DIR))
+        except DbtCloudError as e:
+            if not d.project_dir or not (d.project_dir / "target" / "manifest.json").exists():
+                raise
+            local = cls.from_project(d.project_dir)
+            local.origin = f"local target/manifest.json, because dbt Cloud failed: {e}"
+            return local
 
     def model(self, name: str) -> Model:
         for m in self.nodes.values():
@@ -128,7 +151,10 @@ class DataMap:
 
     def to_markdown(self) -> str:
         """The compact map handed to the agent at the start of a session."""
-        lines = ["# Data map", "", "## Sources (landing)", ""]
+        lines = ["# Data map", ""]
+        if self.origin:
+            lines += [f"_Manifest: {self.origin}_", ""]
+        lines += ["## Sources (landing)", ""]
         lines += [f"- `{r}`" for r in sorted(self.sources.values())]
         lines += ["", "## Models", "", "| model | relation | materialized | upstream |", "|---|---|---|---|"]
         for m in sorted(self.nodes.values(), key=lambda m: m.name):

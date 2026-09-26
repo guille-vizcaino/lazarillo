@@ -20,6 +20,11 @@ dbt:
   prod_schema: analytics
   dev_schema: dev
   # profiles_dir: ~/.dbt              # default: the project dir if it has profiles.yml, else dbt's own
+  # cloud:                            # read the production manifest from a dbt Cloud job
+  #   account_id: 12345
+  #   job_id: 67890                   # the job that builds production
+  #   host: cloud.getdbt.com          # or emea.dbt.com, au.dbt.com, ACCOUNT_PREFIX.us1.dbt.com
+  #   token_env: DBT_CLOUD_API_TOKEN  # env var holding the token; never put it here
 """
 
 DBT_PLACEHOLDER = """\

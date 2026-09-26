@@ -25,8 +25,28 @@ class Guardrails:
 
 
 @dataclass
+class DbtCloudConfig:
+    """Read the production manifest from a dbt Cloud job instead of the local target/."""
+
+    account_id: int
+    # The job that builds production; its latest successful run provides the manifest.
+    job_id: int
+    # Your access URL: cloud.getdbt.com, emea.dbt.com, au.dbt.com or
+    # ACCOUNT_PREFIX.us1.dbt.com. A full http(s):// URL works too.
+    host: str = "cloud.getdbt.com"
+    # Environment variable holding a token that can read job artifacts. The token itself
+    # never goes in lazarillo.yml.
+    token_env: str = "DBT_CLOUD_API_TOKEN"
+    # Downloads are cached in .lazarillo/ next to lazarillo.yml for this long.
+    cache_minutes: int = 10
+
+
+@dataclass
 class DbtConfig:
-    project_dir: Path
+    # Needed by verify, which builds locally. map, describe and impact only need a manifest,
+    # which can come from dbt Cloud instead.
+    project_dir: Path | None = None
+    cloud: DbtCloudConfig | None = None
     prod_target: str = "prod"
     dev_target: str = "dev"
     prod_schema: str = "analytics"
@@ -122,9 +142,12 @@ def load_config(path: Path | None = None) -> Config:
     cfg.attach = {name: _attachment(cfg, v) for name, v in (raw.get("attach") or {}).items()}
 
     if dbt := raw.get("dbt"):
+        if not dbt.get("project_dir") and not dbt.get("cloud"):
+            raise ValueError("The `dbt:` section needs project_dir, cloud, or both")
         cfg.dbt = DbtConfig(
-            project_dir=resolve(dbt["project_dir"]),
-            **{k: v for k, v in dbt.items() if k not in ("project_dir", "profiles_dir")},
+            project_dir=resolve(dbt["project_dir"]) if dbt.get("project_dir") else None,
+            cloud=DbtCloudConfig(**dbt["cloud"]) if dbt.get("cloud") else None,
+            **{k: v for k, v in dbt.items() if k not in ("project_dir", "profiles_dir", "cloud")},
         )
         if dbt.get("profiles_dir"):
             cfg.dbt.profiles_dir = resolve(str(Path(dbt["profiles_dir"]).expanduser()))
