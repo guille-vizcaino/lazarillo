@@ -9,12 +9,18 @@ description = "A data harness that guides AI agents through your lakehouse: cont
 readme = "README.md"
 license = "MIT"
 license-files = ["LICENSE"]
-authors = [{ name = "Guillermo Vizcaíno Román" }]
+authors = [{ name = "Guillermo Vizcaíno Román", email = "hi@guille.me" }]
 requires-python = ">=3.11"
 keywords = ["data-engineering", "dbt", "ai-agents", "mcp", "data-diff", "iceberg", "delta-lake", "redshift", "harness"]
 classifiers = [
-  "License :: OSI Approved :: MIT License",
+  "Development Status :: 3 - Alpha",
+  "Environment :: Console",
+  "Intended Audience :: Developers",
+  "Operating System :: OS Independent",
   "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
   "Topic :: Database",
 ]
 dependencies = [
@@ -35,8 +41,16 @@ dbt = ["dbt-duckdb>=1.8"]
 all = ["lazarillo[delta,iceberg,glue,redshift,dbt,mcp]"]
 dev = ["lazarillo[all]", "pytest>=8", "moto[server]>=5"]
 
+[project.urls]
+Homepage = "https://github.com/guille-vizcaino/lazarillo"
+Documentation = "https://github.com/guille-vizcaino/lazarillo#readme"
+Issues = "https://github.com/guille-vizcaino/lazarillo/issues"
+
 [project.scripts]
 lazarillo = "lazarillo.cli:main"
+
+[tool.hatch.build.targets.sdist]
+exclude = ["CLAUDE.md", ".mcp.json"]
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/lazarillo"]

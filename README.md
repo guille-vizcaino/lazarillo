@@ -38,7 +38,7 @@ lazarillo query "select 42"
 only needs DuckDB; pick extras for the rest of your stack: `delta`, `iceberg`, `dbt`, `mcp`,
 or `all`. Without dbt you still get `query` and `diff`; add a dbt project to unlock `map`,
 `describe`, `impact` and `verify`. If production runs in dbt Cloud, the map can come from
-your production job instead ([docs/dbt-cloud.md](docs/dbt-cloud.md)).
+your production job instead ([docs/dbt-cloud.md](https://github.com/guille-vizcaino/lazarillo/blob/main/docs/dbt-cloud.md)).
 
 ## Try the demo (2 minutes, no cloud account)
 
@@ -50,7 +50,7 @@ python examples/tarima-tickets/build_demo.py   # builds Tarima Tickets, a fictio
 cd examples/tarima-tickets && lazarillo map
 ```
 
-The demo lives in [`examples/tarima-tickets`](examples/tarima-tickets) and uses Lazarillo
+The demo lives in [`examples/tarima-tickets`](https://github.com/guille-vizcaino/lazarillo/tree/main/examples/tarima-tickets) and uses Lazarillo
 exactly like your project would: its own `lazarillo.yml`, dbt project and data. It mirrors a common AWS setup (ticketing system → S3 landing in Delta, migrating
 to Iceberg → warehouse → dbt → Power BI) on DuckDB. Three problems are planted in it,
 the kind that reach production every week:
@@ -126,8 +126,8 @@ Try: *"Finance says the payout for Los Tejados in Barcelona looks too high. Find
 Relations can be `schema.table`, `attached_db.table`, `delta:<path>`,
 `iceberg:<namespace.table>` or `parquet:<glob>`. Paths can be local or `s3://`, Iceberg
 catalogs can be SQL, AWS Glue or REST, and DuckLakes can be attached next to the
-warehouse. See [docs/aws.md](docs/aws.md). The warehouse itself can be a DuckDB file or
-Redshift, with IAM auth; see [docs/redshift.md](docs/redshift.md).
+warehouse. See [docs/aws.md](https://github.com/guille-vizcaino/lazarillo/blob/main/docs/aws.md). The warehouse itself can be a DuckDB file or
+Redshift, with IAM auth; see [docs/redshift.md](https://github.com/guille-vizcaino/lazarillo/blob/main/docs/redshift.md).
 
 ## Scope
 
@@ -145,12 +145,12 @@ Lazarillo doesn't run your pipelines. It checks what they produce.
 - [x] `verify`: dev build, diff and blast radius
 - [x] MCP server
 - [x] Lake in S3 (Delta, Parquet, Iceberg), AWS Glue catalog and DuckLake
-- [x] Redshift as the warehouse, with IAM auth ([docs/redshift.md](docs/redshift.md))
+- [x] Redshift as the warehouse, with IAM auth ([docs/redshift.md](https://github.com/guille-vizcaino/lazarillo/blob/main/docs/redshift.md))
 - [x] dbt Cloud: read the manifest of the production job
 - [ ] `--defer` builds so `verify` doesn't rebuild parents
 - [ ] Cost guardrails (`EXPLAIN`-based scan budget)
 - [ ] **`lazarillo checkride`**: a benchmark of real data-engineering tasks, scored with
-      and without the harness ([docs/checkride.md](docs/checkride.md))
+      and without the harness ([docs/checkride.md](https://github.com/guille-vizcaino/lazarillo/blob/main/docs/checkride.md))
 
 ## License
 
