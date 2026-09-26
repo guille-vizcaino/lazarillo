@@ -28,15 +28,15 @@ the agent's word**. Every claim comes with a diff.
 ## Use it on your project
 
 ```bash
-pip install "lazarillo[all] @ git+https://github.com/guille-vizcaino/lazarillo"
+pip install "lazarillo[all]"
 cd your-project
 lazarillo init                # writes lazarillo.yml and finds your dbt project, if any
 lazarillo query "select 42"
 ```
 
 `lazarillo init` prints the `.mcp.json` block that hands the harness to your agent. The core
-only needs DuckDB; pick extras for the rest of your stack: `delta`, `iceberg`, `dbt`, `mcp`,
-or `all`. Without dbt you still get `query` and `diff`; add a dbt project to unlock `map`,
+only needs DuckDB; pick extras for the rest of your stack: `delta`, `iceberg`, `s3`, `glue`,
+`redshift`, `dbt`, `mcp`, or `all`. Without dbt you still get `query` and `diff`; add a dbt project to unlock `map`,
 `describe`, `impact` and `verify`. If production runs in dbt Cloud, the map can come from
 your production job instead ([docs/dbt-cloud.md](https://github.com/guille-vizcaino/lazarillo/blob/main/docs/dbt-cloud.md)).
 

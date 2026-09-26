@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "lazarillo"
-version = "0.1.0"
+dynamic = ["version"]
 description = "A data harness that guides AI agents through your lakehouse: context, guardrails and verification."
 readme = "README.md"
 license = "MIT"
@@ -48,6 +48,9 @@ Issues = "https://github.com/guille-vizcaino/lazarillo/issues"
 
 [project.scripts]
 lazarillo = "lazarillo.cli:main"
+
+[tool.hatch.version]
+path = "src/lazarillo/__init__.py"
 
 [tool.hatch.build.targets.sdist]
 exclude = ["CLAUDE.md", ".mcp.json"]
