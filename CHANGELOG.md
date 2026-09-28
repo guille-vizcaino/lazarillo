@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased
+
+- `diff` and `verify` no longer report changes that don't exist when the key repeats, as the
+  `unique_key` of a delete+insert model by date does. Such a key made the join pair every row
+  with every other row of the same date. The diff now notices the repeat, compares whole rows
+  and lists which key values differ; pass the row grain as the key to see changes by column.
+- The `verify` MCP tool takes `key`, like `lazarillo verify -k`.
+
 ## 0.1.2
 
 - `lazarillo init` registers the MCP server for your agent: Claude Code (`.mcp.json`),
