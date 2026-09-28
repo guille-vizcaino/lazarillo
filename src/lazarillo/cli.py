@@ -191,7 +191,7 @@ def diff(ctx, left, right, key, where, as_json):
 
 @main.command()
 @click.argument("model")
-@click.option("--key", "-k", multiple=True, help="Defaults to the model's unique_key")
+@click.option("--key", "-k", multiple=True, help="Row key; defaults to the model's unique_key")
 @click.option("--where", help="Only compare a window, e.g. the last 7 days")
 @click.pass_context
 def verify(ctx, model, key, where):
