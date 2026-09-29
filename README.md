@@ -129,7 +129,7 @@ Try: *"Finance says the payout for Los Tejados in Barcelona looks too high. Find
 | `lazarillo impact MODEL` | Downstream models and dashboards |
 | `lazarillo query "SQL"` | One read-only statement, capped and masked |
 | `lazarillo diff LEFT RIGHT -k KEY [--where]` | Row-level diff between any two relations |
-| `lazarillo verify MODEL [--where]` | Build in dev, diff against prod, report blast radius |
+| `lazarillo verify MODEL [-k KEY] [--where]` | Build in dev, diff against prod, report blast radius |
 | `lazarillo mcp` | Serve all of the above over MCP |
 
 Relations can be `schema.table`, `attached_db.table`, `delta:<path>`,

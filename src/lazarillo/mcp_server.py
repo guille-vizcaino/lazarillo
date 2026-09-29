@@ -77,11 +77,12 @@ def build_server(cfg: Config, config_path: Path | None = None) -> MCPServer:
             return f"SQL error: {e}"
 
     @server.tool()
-    def verify(model: str, where: str | None = None) -> str:
+    def verify(model: str, key: list[str] | None = None, where: str | None = None) -> str:
         """Build `model` (and its parents) in the dev schema, diff it against prod and
-        list the exposures that would see the difference."""
+        list the exposures that would see the difference. `key` defaults to the model's
+        unique_key; pass the row grain when that key repeats (e.g. a delete+insert date)."""
         try:
-            return run_verify(cfg, model, where=where).to_markdown()
+            return run_verify(cfg, model, key=key, where=where).to_markdown()
         except WarehouseError as e:
             return f"SQL error: {e}"
 
